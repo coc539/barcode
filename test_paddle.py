@@ -73,6 +73,11 @@ class UnifiedScannerApp:
         self.excel_data = []
         self.create_new_excel_file()
         
+        self.available_cameras = {}
+        self.selected_camera = tk.StringVar()
+        self.get_available_cameras()
+        
+        
         self.setup_ui()
         
         # Setup structured text parsing method
@@ -83,7 +88,58 @@ class UnifiedScannerApp:
         
         self.current_session_data = []
         self.current_row_data = {}
+                
+    
+    def get_available_cameras(self):
+        """Detect available cameras and identify Razer webcam"""
+        self.available_cameras.clear()
         
+        # Try cameras from index 0 to 10
+        for i in range(10):
+            cap = cv2.VideoCapture(i)
+            if cap.isOpened():
+                # Get camera name/description
+                backend = cap.getBackendName()
+                try:
+                    # Try to get camera name - this might not work on all systems
+                    camera_name = cap.getBackendName() + " " + str(i)
+                    
+                    # Check if it's a Razer camera
+                    if "Razer" in camera_name:
+                        # Put Razer camera first in the dict
+                        self.available_cameras = {camera_name: i, **self.available_cameras}
+                    else:
+                        self.available_cameras[camera_name] = i
+                except:
+                    camera_name = f"Camera {i}"
+                    self.available_cameras[camera_name] = i
+                
+                cap.release()
+        
+        # If no cameras found, show error
+        if not self.available_cameras:
+            messagebox.showerror("Error", "No cameras detected!")
+            return
+        
+        # Set default camera to Razer if available, otherwise first available camera
+        default_camera = next(iter(self.available_cameras.keys()))
+        self.selected_camera.set(default_camera)
+
+    def refresh_cameras(self):
+        """Refresh the list of available cameras"""
+        current_camera = self.selected_camera.get()
+        self.get_available_cameras()
+        
+        # Update dropdown values
+        self.camera_dropdown['values'] = list(self.available_cameras.keys())
+        
+        # Try to keep the same camera selected if it's still available
+        if current_camera in self.available_cameras:
+            self.selected_camera.set(current_camera)
+        else:
+            self.selected_camera.set(next(iter(self.available_cameras.keys())))
+            
+    
     def initialize_ocr(self):
         """Initialize PaddleOCR in a separate thread"""
         try:
@@ -302,6 +358,30 @@ class UnifiedScannerApp:
         self.save_status_label = ttk.Label(title_frame, text="Session: Not Started", font=("Helvetica", 8))
         self.save_status_label.pack(anchor=tk.W)
         
+        # Camera Selection
+        camera_frame = ttk.Frame(control_panel)
+        camera_frame.pack(side=tk.LEFT, padx=10)
+        
+        ttk.Label(camera_frame, text="Select Camera:").pack(side=tk.LEFT, padx=5)
+        
+        self.camera_dropdown = ttk.Combobox(
+            camera_frame, 
+            textvariable=self.selected_camera,
+            values=list(self.available_cameras.keys()),
+            state="readonly",
+            width=30
+        )
+        self.camera_dropdown.pack(side=tk.LEFT, padx=5)
+        
+        # Refresh Camera Button
+        refresh_btn = ttk.Button(
+            camera_frame, 
+            text="↻", 
+            width=3,
+            command=self.refresh_cameras
+        )
+        refresh_btn.pack(side=tk.LEFT, padx=5)
+        
         # Control Buttons
         self.scan_button = ttk.Button(control_panel, text="Start Scanning", command=self.toggle_scanning)
         self.scan_button.pack(side=tk.RIGHT, padx=5)
@@ -379,28 +459,68 @@ class UnifiedScannerApp:
         # Clear display tree
         for item in self.tree.get_children():
             self.tree.delete(item)
+            
+            
+        try:
+            # Get selected camera index
+            camera_name = self.selected_camera.get()
+            camera_index = self.available_cameras[camera_name]
+            
+            # Initialize camera
+            self.cap = cv2.VideoCapture(camera_index)
+            
+            if not self.cap.isOpened():
+                raise Exception(f"Failed to open camera {camera_name}")
+                
+            self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1920)  # Set to 1080p
+            self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 1080)
+            self.cap.set(cv2.CAP_PROP_AUTOFOCUS, 1)
+            self.cap.set(cv2.CAP_PROP_FPS, 30)
+            
+            # Start camera capture thread
+            self.camera_thread = threading.Thread(target=self.camera_capture_loop)
+            self.camera_thread.daemon = True
+            self.camera_thread.start()
+            
+            # Start processing thread
+            self.processing_thread = threading.Thread(target=self.process_frames_loop)
+            self.processing_thread.daemon = True
+            self.processing_thread.start()
+            
+            self.scan_button.configure(text="Stop Scanning")
+            self.status_label.configure(text=f"Camera Active: {camera_name}")
+            
+            self.update_frame()
+            
+        except Exception as e:
+            logging.error(f"Camera initialization error: {str(e)}")
+            messagebox.showerror("Camera Error", f"Failed to start camera: {str(e)}")
+            self.stop_scanning()
+            
 
-        # Initialize camera
-        self.cap = cv2.VideoCapture(0)
-        self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
-        self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
-        self.cap.set(cv2.CAP_PROP_AUTOFOCUS, 1)
+        # # Initialize camera
+        # self.cap = cv2.VideoCapture(0)
+        # self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
+        # self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
+        # self.cap.set(cv2.CAP_PROP_AUTOFOCUS, 1)
         
-        # Start camera capture thread
-        self.camera_thread = threading.Thread(target=self.camera_capture_loop)
-        self.camera_thread.daemon = True
-        self.camera_thread.start()
+        # # Start camera capture thread
+        # self.camera_thread = threading.Thread(target=self.camera_capture_loop)
+        # self.camera_thread.daemon = True
+        # self.camera_thread.start()
         
-        # Start processing thread
-        self.processing_thread = threading.Thread(target=self.process_frames_loop)
-        self.processing_thread.daemon = True
-        self.processing_thread.start()
+        # # Start processing thread
+        # self.processing_thread = threading.Thread(target=self.process_frames_loop)
+        # self.processing_thread.daemon = True
+        # self.processing_thread.start()
         
-        self.scan_button.configure(text="Stop Scanning")
-        self.status_label.configure(text="Camera: Active")
+        # self.scan_button.configure(text="Stop Scanning")
+        # self.status_label.configure(text="Camera: Active")
         
-        self.update_frame()
+        # self.update_frame()
 
+
+        
 
     def stop_scanning(self):
         """Modified stop_scanning to append row to existing file"""
