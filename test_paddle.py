@@ -30,7 +30,7 @@ class UnifiedScannerApp:
         )
         
         self.root = root
-        self.root.title("Unified Scanner")
+        self.root.title("OCR Scanner")
         self.root.set_theme("arc")
         self.root.geometry("1200x800")
         self.root.minsize(800, 600)
