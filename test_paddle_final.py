@@ -88,7 +88,16 @@ class UnifiedScannerApp:
         
         self.current_session_data = []
         self.current_row_data = {}
-                
+        
+        
+        logging.basicConfig(
+        level=logging.DEBUG,
+        format='%(asctime)s [%(levelname)s] %(filename)s:%(lineno)d - %(message)s',
+        handlers=[
+            logging.FileHandler('unified_scanner_debug.log'),
+            logging.StreamHandler(sys.stdout)
+        ]
+    )
     
     def get_available_cameras(self):
         """Detect available cameras and identify Razer webcam"""
@@ -382,9 +391,17 @@ class UnifiedScannerApp:
         )
         refresh_btn.pack(side=tk.LEFT, padx=5)
         
-        # Control Buttons
-        self.scan_button = ttk.Button(control_panel, text="Start Scanning", command=self.toggle_scanning)
-        self.scan_button.pack(side=tk.RIGHT, padx=5)
+        # Control Buttons Frame
+        buttons_frame = ttk.Frame(control_panel)
+        buttons_frame.pack(side=tk.RIGHT)
+        
+        # Start/Stop Button
+        self.scan_button = ttk.Button(buttons_frame, text="Start Camera", command=self.toggle_scanning)
+        self.scan_button.pack(side=tk.LEFT, padx=5)
+        
+        # Capture Button
+        self.capture_button = ttk.Button(buttons_frame, text="Capture", command=self.capture_data, state='disabled')
+        self.capture_button.pack(side=tk.LEFT, padx=5)
         
         # Main Content Area
         split_container = ttk.Frame(main_container)
@@ -444,10 +461,10 @@ class UnifiedScannerApp:
             self.stop_scanning()
 
     def start_scanning(self):
-        """Modified start_scanning to handle row creation"""
+        """Modified start_scanning with proper thread initialization checks"""
         self.is_scanning = True
         self.camera_active = True
-        
+
         # Initialize new row data
         self.current_row_data = {
             'Row': len(self.excel_data) + 1,
@@ -459,116 +476,210 @@ class UnifiedScannerApp:
         # Clear display tree
         for item in self.tree.get_children():
             self.tree.delete(item)
-            
-             
+
         try:
             # Get selected camera index
             camera_name = self.selected_camera.get()
             camera_index = self.available_cameras[camera_name]
-            
+
             # Initialize camera
             self.cap = cv2.VideoCapture(camera_index)
-            
+
             if not self.cap.isOpened():
                 raise Exception(f"Failed to open camera {camera_name}")
-                
-            self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1920)  # Set to 1080p
+
+            self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1920)
             self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 1080)
-             
             self.cap.set(cv2.CAP_PROP_FPS, 30)
-            
-            # Start camera capture thread
-            self.camera_thread = threading.Thread(target=self.camera_capture_loop)
-            self.camera_thread.daemon = True
-            self.camera_thread.start()
-            
-            # Start processing thread
-            self.processing_thread = threading.Thread(target=self.process_frames_loop)
-            self.processing_thread.daemon = True
-            self.processing_thread.start()
-            
-            self.scan_button.configure(text="Stop Scanning")
+
+            # Safely check and create threads
+            # First, initialize thread attributes if they don't exist
+            if not hasattr(self, 'camera_thread'):
+                self.camera_thread = None
+            if not hasattr(self, 'processing_thread'):
+                self.processing_thread = None
+
+            # Now check if threads exist and are alive
+            if self.camera_thread is None or not self.camera_thread.is_alive():
+                self.camera_thread = threading.Thread(target=self.camera_capture_loop)
+                self.camera_thread.daemon = True
+                self.camera_thread.start()
+
+            if self.processing_thread is None or not self.processing_thread.is_alive():
+                self.processing_thread = threading.Thread(target=self.process_frames_loop)
+                self.processing_thread.daemon = True
+                self.processing_thread.start()
+
+            # Update UI
+            self.scan_button.configure(text="Stop Camera")
+            self.capture_button.configure(state='normal')
             self.status_label.configure(text=f"Camera Active: {camera_name}")
-            
+
+            # Start frame updates
             self.update_frame()
-            
+
         except Exception as e:
             logging.error(f"Camera initialization error: {str(e)}")
             messagebox.showerror("Camera Error", f"Failed to start camera: {str(e)}")
             self.stop_scanning()
-            
-
-        # # Initialize camera
-        # self.cap = cv2.VideoCapture(0)
-        # self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
-        # self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
-        # self.cap.set(cv2.CAP_PROP_AUTOFOCUS, 1)
-        
-        # # Start camera capture thread
-        # self.camera_thread = threading.Thread(target=self.camera_capture_loop)
-        # self.camera_thread.daemon = True
-        # self.camera_thread.start()
-        
-        # # Start processing thread
-        # self.processing_thread = threading.Thread(target=self.process_frames_loop)
-        # self.processing_thread.daemon = True
-        # self.processing_thread.start()
-        
-        # self.scan_button.configure(text="Stop Scanning")
-        # self.status_label.configure(text="Camera: Active")
-        
-        # self.update_frame()
 
     def stop_scanning(self):
-        """Modified stop_scanning to append row to existing file"""
+        """Stop the scanning process and clean up resources"""
         if self.is_scanning:
             self.camera_active = False
-            
+
             # Wait for threads to finish
             if self.camera_thread:
                 self.camera_thread.join(timeout=1.0)
             if self.processing_thread:
                 self.processing_thread.join(timeout=1.0)
-            
+
             # Clear queues
             while not self.frame_queue.empty():
                 try:
                     self.frame_queue.get_nowait()
                 except queue.Empty:
                     break
-            
+                
             while not self.result_queue.empty():
                 try:
                     self.result_queue.get_nowait()
                 except queue.Empty:
                     break
-            
-            # Save the current row if it has data
-            if self.current_row_data.get('Scanned_Barcodes') or self.current_row_data.get('Scanned_Text'):
-                self.append_row_to_excel()
-            
+                
             self.is_scanning = False
-            self.scan_button.configure(text="Start Scanning")
+            self.scan_button.configure(text="Start Camera")
+            self.capture_button.configure(state='disabled')
             self.status_label.configure(text="Camera: Stopped")
-            
+
             if hasattr(self, 'cap'):
                 self.cap.release()
 
-    def update_frame(self):     
-        if self.camera_active:
-            ret, frame = self.cap.read()
-            if ret:
-                processed_frame = self.process_frame(frame)
-                
-                # Convert to PhotoImage for display
-                frame_rgb = cv2.cvtColor(processed_frame, cv2.COLOR_BGR2RGB)
-                image = Image.fromarray(frame_rgb)
-                photo = ImageTk.PhotoImage(image=image)
-                self.video_label.configure(image=photo)
-                self.video_label.image = photo
-            
-            self.root.after(10, self.update_frame)
+            # Only show summary if there's actual data
+            if self.excel_data and os.path.exists(self.current_excel_file):
+                try:
+                    df = pd.read_excel(self.current_excel_file)
+                    if not df.empty:  # Only show summary if there's data
+                        required_fields = {'ITEMID', 'QUANTITY', 'MANF_NAME', 'DATECODE', 'LOT'}
+                        complete_rows = df[list(required_fields)].notna().all(axis=1).sum()
+                        partial_rows = len(df) - complete_rows
 
+                        # Show summary of completed file
+                        messagebox.showinfo("Session Summary", 
+                                        f"Session saved to {os.path.basename(self.current_excel_file)}\n"
+                                        f"Complete entries: {complete_rows}\n"
+                                        f"Partial entries: {partial_rows}")
+                except Exception as e:
+                    logging.error(f"Error reading Excel file: {str(e)}")
+
+            # Reset current row data regardless of whether we saved
+            self.current_row_data = {
+                'Row': 1,
+                'Timestamp': datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                'Scanned_Barcodes': [],
+                'Scanned_Text': {}
+            }
+
+            # Clear display tree
+            for item in self.tree.get_children():
+                self.tree.delete(item)
+
+            # Update status label
+            if self.current_excel_file and os.path.exists(self.current_excel_file):
+                self.save_status_label.config(text=f"Session: {os.path.basename(self.current_excel_file)}")
+            else:
+                self.save_status_label.config(text="Session: Not Started")
+
+    def capture_data(self):
+        """Modified capture_data with safer thread handling"""
+        try:
+            # Only proceed if we have data to save
+            if self.current_row_data.get('Scanned_Barcodes') or self.current_row_data.get('Scanned_Text'):
+                # Store the current camera state
+                was_scanning = self.is_scanning
+
+                # Temporarily pause scanning while we save
+                self.is_scanning = False
+
+                # Save current data to Excel
+                self.append_row_to_excel()
+
+                # Initialize new row data for next capture
+                self.current_row_data = {
+                    'Row': len(self.excel_data) + 1,
+                    'Timestamp': datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                    'Scanned_Barcodes': [],
+                    'Scanned_Text': {}
+                }
+
+                # Clear display tree for next capture
+                for item in self.tree.get_children():
+                    self.tree.delete(item)
+
+                # Restore scanning state
+                self.is_scanning = was_scanning
+
+                # Keep camera and processing active
+                if was_scanning:
+                    if not self.camera_active:
+                        self.camera_active = True
+
+                        # Safely restart threads if needed
+                        if self.camera_thread is None or not self.camera_thread.is_alive():
+                            self.camera_thread = threading.Thread(target=self.camera_capture_loop)
+                            self.camera_thread.daemon = True
+                            self.camera_thread.start()
+
+                        if self.processing_thread is None or not self.processing_thread.is_alive():
+                            self.processing_thread = threading.Thread(target=self.process_frames_loop)
+                            self.processing_thread.daemon = True
+                            self.processing_thread.start()
+
+                # Show success message
+                self.status_label.configure(text="Data captured successfully - Continue scanning")
+
+            else:
+                messagebox.showwarning("No Data", "No data detected to capture")
+
+        except Exception as e:
+            logging.error(f"Error capturing data: {str(e)}")
+            messagebox.showerror("Capture Error", f"Error capturing data: {str(e)}")
+
+            # Try to recover camera operation
+            try:
+                if self.is_scanning:
+                    self.camera_active = True
+                    self.update_frame()
+            except Exception as recovery_error:
+                logging.error(f"Failed to recover after capture error: {str(recovery_error)}")
+
+
+    def update_frame(self):
+        """Modified update_frame to be more robust"""
+        if self.camera_active and hasattr(self, 'cap') and self.cap.isOpened():
+            try:
+                ret, frame = self.cap.read()
+                if ret:
+                    processed_frame = self.process_frame(frame)
+
+                    # Convert to PhotoImage for display
+                    frame_rgb = cv2.cvtColor(processed_frame, cv2.COLOR_BGR2RGB)
+                    image = Image.fromarray(frame_rgb)
+                    photo = ImageTk.PhotoImage(image=image)
+                    self.video_label.configure(image=photo)
+                    self.video_label.image = photo
+
+                    # Schedule next update only if camera is still active
+                    if self.camera_active:
+                        self.root.after(10, self.update_frame)
+                else:
+                    logging.warning("Failed to read frame")
+                    if self.camera_active:
+                        self.root.after(100, self.update_frame)  # Retry after longer delay
+            except Exception as e:
+                logging.error(f"Error in update_frame: {str(e)}")
+                if self.camera_active:
+                    self.root.after(100, self.update_frame)  # Retry after longer delay
 
     def detect_and_extract_text(self, frame):
         """
@@ -793,28 +904,24 @@ class UnifiedScannerApp:
                     
                 
     def create_new_excel_file(self):
-        """Create a new Excel file for the session"""
-        current_date = datetime.datetime.now().strftime("%Y-%m-%d")
-        date_dir = os.path.join(self.base_dir, current_date)
-        os.makedirs(date_dir, exist_ok=True)
-        
-        timestamp = datetime.datetime.now().strftime("%H-%M-%S")
-        excel_filename = f"scan_data_{timestamp}.xlsx"
-        self.current_excel_file = os.path.join(date_dir, excel_filename)
-        
-        # Create empty DataFrame with required columns
-        columns = [
-            'Timestamp', 'Barcodes', 
-            'GRN_NUMBER', 'ITEMID', 'QUANTITY', 
-            'MANF_NAME', 'LOT', 'DATECODE',
-            'ORDER_CODE', 'FLM', 'MARKING', 'ROHSCOMPLIANCE'
-        ]
-        df = pd.DataFrame(columns=columns)
-        df.to_excel(self.current_excel_file, index=False)
-        self.excel_data = []  # Reset excel data
+        """Initialize Excel file path without creating the file"""
+        try:
+            current_date = datetime.datetime.now().strftime("%Y-%m-%d")
+            date_dir = os.path.join(self.base_dir, current_date)
+            os.makedirs(date_dir, exist_ok=True)
+
+            timestamp = datetime.datetime.now().strftime("%H-%M-%S")
+            excel_filename = f"scan_data_{timestamp}.xlsx"
+            self.current_excel_file = os.path.join(date_dir, excel_filename)
+            self.excel_data = []  # Reset excel data
+            logging.info(f"Excel file path initialized: {excel_filename}")
+
+        except Exception as e:
+            logging.error(f"Error initializing Excel file path: {str(e)}")
+            messagebox.showerror("File Initialization Error", f"Error initializing Excel file path: {str(e)}")
 
     def append_row_to_excel(self):
-        """Append current row to existing Excel file"""
+        """Append current row to Excel file, creating the file if it doesn't exist"""
         try:
             # Prepare row data
             base_row = {
@@ -830,8 +937,20 @@ class UnifiedScannerApp:
             # Append to excel_data list
             self.excel_data.append(base_row)
             
-            # Read existing Excel file
-            df = pd.read_excel(self.current_excel_file)
+            # Create DataFrame with required columns
+            columns = [
+                'Timestamp', 'Barcodes', 
+                'GRN_NUMBER', 'ITEMID', 'QUANTITY', 
+                'MANF_NAME', 'LOT', 'DATECODE',
+                'ORDER_CODE', 'FLM', 'MARKING', 'ROHSCOMPLIANCE'
+            ]
+            
+            if os.path.exists(self.current_excel_file):
+                # If file exists, read it
+                df = pd.read_excel(self.current_excel_file)
+            else:
+                # If file doesn't exist, create new DataFrame
+                df = pd.DataFrame(columns=columns)
             
             # Create new row DataFrame
             new_row_df = pd.DataFrame([base_row])
@@ -933,30 +1052,27 @@ class UnifiedScannerApp:
 
             
     def on_closing(self):
-        """Modified on_closing to handle final save"""
+        """Handle application closing without creating new file"""
         try:
-            # Stop scanning if active
+            # If scanning is still active, stop it cleanly
             if self.is_scanning:
-                self.stop_scanning()
-            
-            # Calculate statistics
-            if self.excel_data:
-                df = pd.read_excel(self.current_excel_file)
-                required_fields = {'ITEMID', 'QUANTITY', 'MANF_NAME', 'DATECODE', 'LOT'}
-                complete_rows = df[list(required_fields)].notna().all(axis=1).sum()
-                partial_rows = len(df) - complete_rows
-                
-                messagebox.showinfo("Session Summary", 
-                                  f"Session saved to {self.current_excel_file}\n"
-                                  f"Complete entries: {complete_rows}\n"
-                                  f"Partial entries: {partial_rows}")
-            
-            # Close the application
+                self.camera_active = False
+    
+                # Stop the camera and clean up threads
+                if self.camera_thread:
+                    self.camera_thread.join(timeout=1.0)
+                if self.processing_thread:
+                    self.processing_thread.join(timeout=1.0)
+    
+                if hasattr(self, 'cap'):
+                    self.cap.release()
+    
             self.root.destroy()
-            
+    
         except Exception as e:
             logging.error(f"Error during closing: {str(e)}")
             messagebox.showerror("Close Error", f"Error during closing: {str(e)}")
+
 
 
 def main():
@@ -966,5 +1082,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-# Check the difference between 1080p on 30fps vs 720p on 60fps
