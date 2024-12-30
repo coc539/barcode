@@ -32,8 +32,30 @@ class UnifiedScannerApp:
         self.root = root
         self.root.title("OCR Scanner")
         self.root.set_theme("arc")
-        self.root.geometry("1200x800")
-        self.root.minsize(800, 600)
+
+        
+        screen_width = root.winfo_screenwidth()
+        screen_height = root.winfo_screenheight()
+        
+        # Calculate default window size (80% of screen)
+        self.window_width = int(screen_width * 0.8)
+        self.window_height = int(screen_height * 0.8)
+        
+        # Calculate minimum window size (60% of screen)
+        min_width = int(screen_width * 0.6)
+        min_height = int(screen_height * 0.6)
+        
+        # Set window size and position
+        x_pos = (screen_width - self.window_width) // 2
+        y_pos = (screen_height - self.window_height) // 2
+        
+        # Configure window
+        self.root.geometry(f"{self.window_width}x{self.window_height}+{x_pos}+{y_pos}")
+        self.root.minsize(min_width, min_height)
+        
+        # Store scaling factors
+        self.scale_x = self.window_width / 1200  # Base width
+        self.scale_y = self.window_height / 800  # Base height
         
         # Initialize queues for thread communication
         self.frame_queue = queue.Queue(maxsize=2)  # Limit queue size to prevent memory buildup
@@ -98,6 +120,7 @@ class UnifiedScannerApp:
             logging.StreamHandler(sys.stdout)
         ]
     )
+    
     
     def get_available_cameras(self):
         """Detect available cameras and identify Razer webcam"""
@@ -350,66 +373,91 @@ class UnifiedScannerApp:
     
     
     def setup_ui(self):
-        main_container = ttk.Frame(self.root, padding="10")
+        # Calculate scaled padding
+        base_padding = int(10 * self.scale_x)
+        
+        main_container = ttk.Frame(self.root, padding=str(base_padding))
         main_container.pack(fill=tk.BOTH, expand=True)
         
-        # Control Panel
+        # Control Panel with scaled fonts and spacing
         control_panel = ttk.Frame(main_container)
-        control_panel.pack(fill=tk.X, pady=(0, 10))
+        control_panel.pack(fill=tk.X, pady=(0, base_padding))
         
-        # Title
+        # Title with scaled font size
         title_frame = ttk.Frame(control_panel)
         title_frame.pack(side=tk.LEFT)
         
-        title_label = ttk.Label(title_frame, text="OCR Scanner", font=("Helvetica", 16, "bold"))
+        title_font_size = int(16 * self.scale_y)
+        status_font_size = int(8 * self.scale_y)
+        
+        title_label = ttk.Label(
+            title_frame, 
+            text="Unified Scanner", 
+            font=("Helvetica", title_font_size, "bold")
+        )
         title_label.pack(anchor=tk.W)
         
-        self.save_status_label = ttk.Label(title_frame, text="Session: Not Started", font=("Helvetica", 8))
+        self.save_status_label = ttk.Label(
+            title_frame, 
+            text="Session: Not Started", 
+            font=("Helvetica", status_font_size)
+        )
         self.save_status_label.pack(anchor=tk.W)
         
-        # Camera Selection
+        # Camera Selection with scaled spacing
         camera_frame = ttk.Frame(control_panel)
-        camera_frame.pack(side=tk.LEFT, padx=10)
+        camera_frame.pack(side=tk.LEFT, padx=int(10 * self.scale_x))
         
-        ttk.Label(camera_frame, text="Select Camera:").pack(side=tk.LEFT, padx=5)
+        ttk.Label(camera_frame, text="Select Camera:").pack(side=tk.LEFT, padx=int(5 * self.scale_x))
+        
+        # Calculate dropdown width based on screen size
+        dropdown_width = int(30 * self.scale_x)
         
         self.camera_dropdown = ttk.Combobox(
             camera_frame, 
             textvariable=self.selected_camera,
             values=list(self.available_cameras.keys()),
             state="readonly",
-            width=30
+            width=dropdown_width
         )
-        self.camera_dropdown.pack(side=tk.LEFT, padx=5)
+        self.camera_dropdown.pack(side=tk.LEFT, padx=int(5 * self.scale_x))
         
         # Refresh Camera Button
         refresh_btn = ttk.Button(
             camera_frame, 
             text="↻", 
-            width=3,
+            width=int(3 * self.scale_x),
             command=self.refresh_cameras
         )
-        refresh_btn.pack(side=tk.LEFT, padx=5)
+        refresh_btn.pack(side=tk.LEFT, padx=int(5 * self.scale_x))
         
         # Control Buttons Frame
         buttons_frame = ttk.Frame(control_panel)
         buttons_frame.pack(side=tk.RIGHT)
         
-        # Start/Stop Button
+        # Buttons with scaled padding
         self.scan_button = ttk.Button(buttons_frame, text="Start Camera", command=self.toggle_scanning)
-        self.scan_button.pack(side=tk.LEFT, padx=5)
+        self.scan_button.pack(side=tk.LEFT, padx=int(5 * self.scale_x))
         
-        # Capture Button
         self.capture_button = ttk.Button(buttons_frame, text="Capture", command=self.capture_data, state='disabled')
-        self.capture_button.pack(side=tk.LEFT, padx=5)
+        self.capture_button.pack(side=tk.LEFT, padx=int(5 * self.scale_x))
         
         # Main Content Area
         split_container = ttk.Frame(main_container)
         split_container.pack(fill=tk.BOTH, expand=True)
         
-        # Camera Feed
-        camera_frame = ttk.LabelFrame(split_container, text="Camera Feed", padding="5")
-        camera_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 5))
+        # Camera Feed (left side)
+        camera_frame = ttk.LabelFrame(
+            split_container, 
+            text="Camera Feed", 
+            padding=str(int(5 * self.scale_x))
+        )
+        camera_frame.pack(
+            side=tk.LEFT, 
+            fill=tk.BOTH, 
+            expand=True, 
+            padx=(0, int(5 * self.scale_x))
+        )
         
         self.video_frame = ttk.Frame(camera_frame)
         self.video_frame.pack(fill=tk.BOTH, expand=True)
@@ -417,30 +465,86 @@ class UnifiedScannerApp:
         self.video_label = ttk.Label(self.video_frame)
         self.video_label.pack(fill=tk.BOTH, expand=True)
         
-        self.status_label = ttk.Label(camera_frame, text="Camera: Stopped", font=("Helvetica", 10))
-        self.status_label.pack(pady=5)
+        # Status label with scaled font
+        self.status_label = ttk.Label(
+            camera_frame, 
+            text="Camera: Stopped", 
+            font=("Helvetica", int(10 * self.scale_y))
+        )
+        self.status_label.pack(pady=int(5 * self.scale_y))
         
-        # Results Area
-        items_frame = ttk.LabelFrame(split_container, text="Scanned Items", padding="5")
-        items_frame.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True, padx=(5, 0))
+        # Results Area (right side)
+        items_frame = ttk.LabelFrame(
+            split_container, 
+            text="Scanned Items", 
+            padding=str(int(5 * self.scale_x))
+        )
+        items_frame.pack(
+            side=tk.RIGHT, 
+            fill=tk.BOTH, 
+            expand=True, 
+            padx=(int(5 * self.scale_x), 0)
+        )
         
-        # Treeview for results
-        self.tree = ttk.Treeview(items_frame, columns=("Row", "Type", "Data", "Timestamp"), show="headings")
+        # Treeview with scaled columns
+        self.tree = ttk.Treeview(
+            items_frame, 
+            columns=("Row", "Type", "Data", "Timestamp"), 
+            show="headings"
+        )
+        
+        # Calculate column widths based on screen size
         self.tree.heading("Row", text="Row")
         self.tree.heading("Type", text="Type")
         self.tree.heading("Data", text="Data")
         self.tree.heading("Timestamp", text="Timestamp")
         
-        self.tree.column("Row", width=50, anchor='center')
-        self.tree.column("Type", width=100)
-        self.tree.column("Data", width=300)
-        self.tree.column("Timestamp", width=150)
+        self.tree.column("Row", width=int(50 * self.scale_x), anchor='center')
+        self.tree.column("Type", width=int(100 * self.scale_x))
+        self.tree.column("Data", width=int(300 * self.scale_x))
+        self.tree.column("Timestamp", width=int(150 * self.scale_x))
         
         scrollbar = ttk.Scrollbar(items_frame, orient=tk.VERTICAL, command=self.tree.yview)
         self.tree.configure(yscrollcommand=scrollbar.set)
         
         self.tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+
+        # Bind resize event
+        self.root.bind('<Configure>', self.on_window_resize)
+        
+    def on_window_resize(self, event):
+        """Handle window resize events"""
+        # Only process if the window size actually changed
+        if event.widget == self.root and \
+           (self.window_width != event.width or self.window_height != event.height):
+            
+            # Update stored dimensions
+            self.window_width = event.width
+            self.window_height = event.height
+            
+            # Update scaling factors
+            self.scale_x = self.window_width / 1200
+            self.scale_y = self.window_height / 800
+            
+            # Update UI elements that need to be resized
+            self._resize_ui_elements()
+            
+    def _resize_ui_elements(self):
+        """Update sizes of UI elements after resize"""
+        # Update fonts
+        title_font_size = int(16 * self.scale_y)
+        status_font_size = int(8 * self.scale_y)
+        
+        # Update column widths
+        self.tree.column("Row", width=int(50 * self.scale_x))
+        self.tree.column("Type", width=int(100 * self.scale_x))
+        self.tree.column("Data", width=int(300 * self.scale_x))
+        self.tree.column("Timestamp", width=int(150 * self.scale_x))
+        
+        # Update camera preview size if active
+        if hasattr(self, 'cap') and self.cap.isOpened():
+            self.update_frame()
 
     def create_session_directory(self):
         current_date = datetime.datetime.now().strftime("%Y-%m-%d")
@@ -887,7 +991,7 @@ class UnifiedScannerApp:
         if self.current_row_data.get('Scanned_Barcodes'):
             collected_data.append(f"Barcodes:\n{chr(10).join(self.current_row_data['Scanned_Barcodes'])}")
     
-        # Join all data with newlines      
+        # Join all data with newlines
         display_text = '\n\n'.join(collected_data)
     
         self.tree.insert("", 0, values=(
