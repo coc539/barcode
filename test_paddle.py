@@ -30,7 +30,11 @@ class UnifiedScannerApp:
         )
         
         self.root = root
+<<<<<<< HEAD
         self.root.title("OCR Scanner")
+=======
+        self.root.title("Unified Scanner")
+>>>>>>> 53ed444a434c3f7ec4935a00c462aa3396322844
         self.root.set_theme("arc")
         self.root.geometry("1200x800")
         self.root.minsize(800, 600)
@@ -69,6 +73,7 @@ class UnifiedScannerApp:
         self.init_ocr_thread.daemon = True
         self.init_ocr_thread.start()
         
+<<<<<<< HEAD
         self.current_excel_file = None
         self.excel_data = []
         self.create_new_excel_file()
@@ -78,6 +83,8 @@ class UnifiedScannerApp:
         self.get_available_cameras()
         
         
+=======
+>>>>>>> 53ed444a434c3f7ec4935a00c462aa3396322844
         self.setup_ui()
         
         # Setup structured text parsing method
@@ -88,6 +95,7 @@ class UnifiedScannerApp:
         
         self.current_session_data = []
         self.current_row_data = {}
+<<<<<<< HEAD
                 
     
     def get_available_cameras(self):
@@ -140,6 +148,9 @@ class UnifiedScannerApp:
             self.selected_camera.set(next(iter(self.available_cameras.keys())))
             
     
+=======
+
+>>>>>>> 53ed444a434c3f7ec4935a00c462aa3396322844
     def initialize_ocr(self):
         """Initialize PaddleOCR in a separate thread"""
         try:
@@ -223,7 +234,11 @@ class UnifiedScannerApp:
                     r'\(33T\)PUID\s*\s*\s*(\w+)' #nexperia
                 ],
                 'QUANTITY': [
+<<<<<<< HEAD
                     r'QTY\s*\(Q\)\s*[:]\s*(\d+)', #TDK
+=======
+                    r'QTY\(Q\)\s*[:]\s*(\d+)', #TDK
+>>>>>>> 53ed444a434c3f7ec4935a00c462aa3396322844
                     r'\(Q\)QTY\s*\s*\s*\s*\s*(\d+)', #nexperia
                     r'QUANTITY\s*[:#]?\s*(\d+(?:\.\d+)?)',
                     r'NO\.\s*OF\s*PIECES\s*[:#]?\s*(\d+(?:\.\d+)?)'
@@ -235,7 +250,10 @@ class UnifiedScannerApp:
                 ],
                 'MANF_NAME': [
                     r'VDR\(V\)\s*[:]?\s*(\w+)', #TDK
+<<<<<<< HEAD
                     r'VDR\(V\)\s*:\s*(\w+)',
+=======
+>>>>>>> 53ed444a434c3f7ec4935a00c462aa3396322844
                     r'MANF(?:ACTURER)?\s*[:#]?\s*([^0-9\n]+)',
                     r'MANUFACTURER\s*[:#]?\s*([^0-9\n]+)',
                     r'MADE\s*BY\s*[:#]?\s*([^0-9\n]+)',
@@ -259,9 +277,13 @@ class UnifiedScannerApp:
                 ],
                 'LOT': [
                     r'\(1T\)\s*([A-Za-z0-9-]+)',           # Basic (1T) format
+<<<<<<< HEAD
                     r'LOT\s*NO\s*\(1T\):\s*([\w-]+(?:\+\w+)?)',
                     # r'LOT\s*NO\(1T\)\s*:\s*([\w-]+(?:\+\w+)?)',# TDK format with optional +
                     r'LOT:\s*NO\s*\(1T\):([\w-]+(?:\+\w+)?)',
+=======
+                    r'LOT\s*NO\(1T\)\s*:\s*([\w-]+(?:\+\w+)?)',  # TDK format with optional +
+>>>>>>> 53ed444a434c3f7ec4935a00c462aa3396322844
                     r'LOT\s*[:#]?\s*([\w-]+(?:\+\w+)?)',   # General LOT format
                     r'LOT\s*NUMBER\s*[:#]?\s*([\w-]+)',     # Full LOT NUMBER format
                     r'BATCH\s*[:#]?\s*([\w-]+)',           # BATCH format
@@ -358,6 +380,7 @@ class UnifiedScannerApp:
         self.save_status_label = ttk.Label(title_frame, text="Session: Not Started", font=("Helvetica", 8))
         self.save_status_label.pack(anchor=tk.W)
         
+<<<<<<< HEAD
         # Camera Selection
         camera_frame = ttk.Frame(control_panel)
         camera_frame.pack(side=tk.LEFT, padx=10)
@@ -382,6 +405,8 @@ class UnifiedScannerApp:
         )
         refresh_btn.pack(side=tk.LEFT, padx=5)
         
+=======
+>>>>>>> 53ed444a434c3f7ec4935a00c462aa3396322844
         # Control Buttons
         self.scan_button = ttk.Button(control_panel, text="Start Scanning", command=self.toggle_scanning)
         self.scan_button.pack(side=tk.RIGHT, padx=5)
@@ -444,6 +469,7 @@ class UnifiedScannerApp:
             self.stop_scanning()
 
     def start_scanning(self):
+<<<<<<< HEAD
         """Modified start_scanning to handle row creation"""
         self.is_scanning = True
         self.camera_active = True
@@ -451,11 +477,23 @@ class UnifiedScannerApp:
         # Initialize new row data
         self.current_row_data = {
             'Row': len(self.excel_data) + 1,
+=======
+        """Modified start_scanning with threaded processing"""
+        if hasattr(self, 'current_row_data') and (
+            self.current_row_data.get('Scanned_Barcodes') or 
+            self.current_row_data.get('Scanned_Text')
+        ):
+            self.current_session_data.append(self.current_row_data)
+
+        self.current_row_data = {
+            'Row': len(self.current_session_data) + 1,
+>>>>>>> 53ed444a434c3f7ec4935a00c462aa3396322844
             'Timestamp': datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             'Scanned_Barcodes': [],
             'Scanned_Text': {}
         }
 
+<<<<<<< HEAD
         # Clear display tree
         for item in self.tree.get_children():
             self.tree.delete(item)
@@ -521,6 +559,39 @@ class UnifiedScannerApp:
 
     def stop_scanning(self):
         """Modified stop_scanning to append row to existing file"""
+=======
+        for item in self.tree.get_children():
+            self.tree.delete(item)
+
+        self.session_start_time = datetime.datetime.now()
+        self.is_scanning = True
+        self.camera_active = True
+        
+        # Initialize camera with lower resolution for better performance
+        self.cap = cv2.VideoCapture(0)
+        self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)  # Reduced resolution
+        self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
+        self.cap.set(cv2.CAP_PROP_AUTOFOCUS, 1)
+        
+        # Start camera capture thread
+        self.camera_thread = threading.Thread(target=self.camera_capture_loop)
+        self.camera_thread.daemon = True
+        self.camera_thread.start()
+        
+        # Start processing thread
+        self.processing_thread = threading.Thread(target=self.process_frames_loop)
+        self.processing_thread.daemon = True
+        self.processing_thread.start()
+        
+        self.scan_button.configure(text="Stop Scanning")
+        self.status_label.configure(text="Camera: Active")
+        
+        self.update_frame()
+
+
+    def stop_scanning(self):
+        """Modified stop_scanning with proper thread cleanup"""
+>>>>>>> 53ed444a434c3f7ec4935a00c462aa3396322844
         if self.is_scanning:
             self.camera_active = False
             
@@ -543,9 +614,18 @@ class UnifiedScannerApp:
                 except queue.Empty:
                     break
             
+<<<<<<< HEAD
             # Save the current row if it has data
             if self.current_row_data.get('Scanned_Barcodes') or self.current_row_data.get('Scanned_Text'):
                 self.append_row_to_excel()
+=======
+            # Save the current row
+            if self.current_row_data.get('Scanned_Barcodes') or self.current_row_data.get('Scanned_Text'):
+                self.current_session_data.append(self.current_row_data)
+            
+            # Save the session
+            self.save_session()
+>>>>>>> 53ed444a434c3f7ec4935a00c462aa3396322844
             
             self.is_scanning = False
             self.scan_button.configure(text="Start Scanning")
@@ -760,16 +840,27 @@ class UnifiedScannerApp:
             logging.error(f"Text processing error: {e}")
 
 
+<<<<<<< HEAD
     def update_display(self):
         """
         Update the treeview display with current data in vertical format
         """
         self.tree.delete(*self.tree.get_children())
     
+=======
+
+    def update_display(self):
+        """
+        Update the treeview display with current data
+        """
+        self.tree.delete(*self.tree.get_children())
+
+>>>>>>> 53ed444a434c3f7ec4935a00c462aa3396322844
         # Create a formatted string of all collected data
         collected_data = []
         if 'Scanned_Text' in self.current_row_data:
             for key, value in self.current_row_data['Scanned_Text'].items():
+<<<<<<< HEAD
                 collected_data.append(f"{key}:\n{value}")
     
         # Add barcode data if present
@@ -847,6 +938,22 @@ class UnifiedScannerApp:
             logging.error(f"Error appending row: {str(e)}")
             messagebox.showerror("Save Error", f"Error appending row: {str(e)}")
 
+=======
+                collected_data.append(f"{key}: {value}")
+
+        # Add barcode data if present
+        if self.current_row_data.get('Scanned_Barcodes'):
+            collected_data.append(f"Barcodes: {', '.join(self.current_row_data['Scanned_Barcodes'])}")
+
+        self.tree.insert("", 0, values=(
+            self.current_row_data.get('Row', 1),
+            "Collected Data",
+            " | ".join(collected_data),
+            self.current_row_data.get('Timestamp', datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+        ))
+                
+                
+>>>>>>> 53ed444a434c3f7ec4935a00c462aa3396322844
 
     def save_session(self):
         try:
@@ -933,6 +1040,7 @@ class UnifiedScannerApp:
 
             
     def on_closing(self):
+<<<<<<< HEAD
         """Modified on_closing to handle final save"""
         try:
             # Stop scanning if active
@@ -958,6 +1066,12 @@ class UnifiedScannerApp:
             logging.error(f"Error during closing: {str(e)}")
             messagebox.showerror("Close Error", f"Error during closing: {str(e)}")
 
+=======
+        # Save current session before closing
+        self.save_session()
+        # Close the application
+        self.root.destroy()
+>>>>>>> 53ed444a434c3f7ec4935a00c462aa3396322844
 
 def main():
     root = ThemedTk(theme="arc")
@@ -967,4 +1081,9 @@ def main():
 if __name__ == "__main__":
     main()
 
+<<<<<<< HEAD
 # Check the difference between 1080p on 30fps vs 720p on 60fps
+=======
+'''[2024-12-21 16:36:21,013] 
+[   ERROR] test_paddle.py:505 - Text detection error: index 16 is out of bounds for axis 0 with size 16'''
+>>>>>>> 53ed444a434c3f7ec4935a00c462aa3396322844
